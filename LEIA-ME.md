@@ -1,5 +1,27 @@
 # Finanças Pessoais — instalação e sincronização
 
+## Já está no ar
+
+| O quê | Onde |
+|---|---|
+| App publicado | <https://edilsonmoreira21-hue.github.io/financas-pessoais/> |
+| Código | <https://github.com/edilsonmoreira21-hue/financas-pessoais> |
+| Banco (Supabase) | projeto `financas-pessoais` · `https://npooxxzrcalmvqodtydt.supabase.co` · região São Paulo |
+
+O esquema do banco já foi aplicado (4 tabelas, RLS ativo, 1 política por tabela).
+Falta apenas conectar o app: **Configurações → Sincronização na nuvem**, colar a chave
+publishable do Supabase e criar sua conta de acesso.
+
+Para publicar uma alteração no app depois de editar os arquivos:
+
+```bash
+git add -A && git commit -m "ajuste" && git push
+```
+
+O GitHub Pages republica sozinho em cerca de um minuto. Se o `git push` reclamar de conta,
+rode antes `gh auth switch --user edilsonmoreira21-hue`.
+
+
 App de finanças em arquivo único, com banco na nuvem (Supabase) e instalação no celular (PWA).
 Sem servidor próprio, sem build, sem npm.
 
