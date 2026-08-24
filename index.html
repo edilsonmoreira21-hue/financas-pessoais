@@ -62,6 +62,21 @@ header.top{
 #pillSync{color:var(--muted);font-size:15px}
 #pillSync.ok{color:var(--green)} #pillSync.pend{color:var(--amber)} #pillSync.erro{color:var(--red)}
 .sync-status{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:14px}
+
+/* ---------- tela de entrada ---------- */
+.login-wrap{min-height:100vh;display:grid;place-items:center;padding:24px}
+.login{width:min(400px,100%)}
+.login .marca{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:26px;text-align:center}
+.login .marca .mark{width:60px;height:60px;border-radius:17px;display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--brand),#8b5cf6);color:#fff;font-size:28px}
+.login h1{font-size:23px;letter-spacing:-.02em}
+.login .sub{color:var(--muted);font-size:14px;margin-top:5px}
+.login .card{display:grid;gap:14px}
+.login .acoes{display:grid;gap:9px;margin-top:4px}
+.login .btn{width:100%;justify-content:center;padding:11px}
+.login .erro{background:var(--red-soft);color:var(--red);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.login .aviso{background:var(--brand-soft);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted)}
+.login .rodape{text-align:center;font-size:12.5px;color:var(--muted);margin-top:18px;line-height:1.6}
 /* altura única para todos os controles do cabeçalho */
 header.top .btn,
 header.top select{
@@ -265,6 +280,14 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
 
 <div class="toast" id="toast"></div>
 <script>
+/* ============================ configuração do projeto ============================ */
+/* A chave publishable é feita para viver no navegador: quem protege os dados é o RLS
+   do banco (cada conta só enxerga as próprias linhas). Trocar a chave: ./configurar-chave.sh */
+const SUPABASE = {
+  url: 'https://npooxxzrcalmvqodtydt.supabase.co',
+  key: '__CHAVE_PUBLISHABLE__' // chave publishable
+};
+
 /* ============================ estado ============================ */
 const KEY = 'financas-pessoais-v1';
 const PALETTE = ['#4f46e5','#12a678','#e29317','#e0475f','#0ea5e9','#8b5cf6','#f472b6','#14b8a6','#f97316','#64748b'];
@@ -472,6 +495,13 @@ function linha(cv, meses){
 
 /* ============================ views ============================ */
 function render(){
+  const logado = SB.ligado();
+  $('header.top').style.display = logado ? '' : 'none';
+  if(!logado){
+    $('#view').innerHTML = telaLogin();
+    eventosLogin();
+    return;
+  }
   $$('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
   popularMeses();
   const el=$('#view');
@@ -486,6 +516,67 @@ function render(){
       if(cl) linha(cl, ultimosMeses(12));
     });
   }
+}
+
+function telaLogin(){
+  const semChave = !SB.configurado();
+  return `
+  <div class="login-wrap"><div class="login">
+    <div class="marca">
+      <span class="mark">◎</span>
+      <div>
+        <h1>Finanças Pessoais</h1>
+        <div class="sub">Entre para ver seus lançamentos em qualquer aparelho.</div>
+      </div>
+    </div>
+    <div class="card">
+      ${semChave ? `<div class="aviso">Este app ainda não está ligado a um banco.
+         Rode <b>./configurar-chave.sh</b> com a chave publishable do Supabase.</div>` : ''}
+      <div id="loginErro"></div>
+      <label class="field"><span>E-mail</span>
+        <input id="loginEmail" type="email" autocomplete="username" placeholder="voce@email.com" ${semChave?'disabled':''}></label>
+      <label class="field"><span>Senha</span>
+        <input id="loginSenha" type="password" autocomplete="current-password" placeholder="sua senha" ${semChave?'disabled':''}></label>
+      <div class="acoes">
+        <button class="btn primary" id="loginEntrar" ${semChave?'disabled':''}>Entrar</button>
+        <button class="btn ghost" id="loginCriar" ${semChave?'disabled':''}>Criar conta</button>
+      </div>
+    </div>
+    <div class="rodape">
+      Seus dados ficam na sua conta do Supabase e no seu aparelho.<br>
+      A senha é enviada apenas ao Supabase e nunca fica salva aqui.
+    </div>
+  </div></div>`;
+}
+
+function eventosLogin(){
+  const erro = msg => { $('#loginErro').innerHTML = msg ? `<div class="erro">${esc(msg)}</div>` : ''; };
+  const autenticar = async criar => {
+    const em = $('#loginEmail').value.trim(), se = $('#loginSenha').value;
+    if(!em || !se) return erro('Informe e-mail e senha.');
+    const alvo = criar ? $('#loginCriar') : $('#loginEntrar');
+    const rotulo = alvo.textContent;
+    erro(''); alvo.disabled = true; alvo.textContent = 'Aguarde...';
+    try{
+      await sbEntrar(em, se, criar);
+      render();
+      toast(criar ? 'Conta criada' : 'Bem-vindo de volta');
+    }catch(e){
+      const m = /invalid login/i.test(e.message) ? 'E-mail ou senha incorretos.'
+              : /already registered/i.test(e.message) ? 'Este e-mail já tem conta — use Entrar.'
+              : /confirme/i.test(e.message) ? 'Confirme o e-mail que o Supabase enviou e depois use Entrar.'
+              : /password/i.test(e.message) ? 'A senha precisa de pelo menos 6 caracteres.'
+              : e.message;
+      erro(m);
+      alvo.disabled = false; alvo.textContent = rotulo;
+    }
+  };
+  $('#loginEntrar').onclick = () => autenticar(false);
+  $('#loginCriar').onclick  = () => autenticar(true);
+  $('#loginSenha').onkeydown = e => { if(e.key === 'Enter') autenticar(false); };
+  $('#loginEmail').onkeydown = e => { if(e.key === 'Enter') $('#loginSenha').focus(); };
+  const em = $('#loginEmail');
+  if(em && !em.disabled){ em.value = localStorage.getItem('sb-email') || ''; (em.value ? $('#loginSenha') : em).focus(); }
 }
 
 function popularMeses(){
@@ -743,32 +834,6 @@ function vMetas(){
 
 function cardSync(){
   const ultima = localStorage.getItem('sb-syncedAt');
-  if(!SB.configurado()){
-    return `
-      <div class="hint" style="margin-bottom:14px">
-        Conecte um projeto Supabase para usar o app no computador e no celular com os mesmos dados.
-        Copie <b>Project URL</b> e a chave <b>anon public</b> em Project Settings → API.
-      </div>
-      <div style="display:grid;gap:10px">
-        <label class="field"><span>Project URL</span><input id="sbUrl" placeholder="https://xxxxxxxx.supabase.co"></label>
-        <label class="field"><span>Chave anon public</span><input id="sbKey" placeholder="eyJhbGciOi..."></label>
-        <div><button class="btn primary" id="btnSbConf">Salvar conexão</button></div>
-      </div>`;
-  }
-  if(!SB.ligado()){
-    return `
-      <div class="hint" style="margin-bottom:14px">Projeto conectado: <b>${esc(SB.url)}</b></div>
-      <div style="display:grid;gap:10px">
-        <label class="field"><span>E-mail</span><input id="sbEmail" type="email" autocomplete="username" placeholder="voce@email.com"></label>
-        <label class="field"><span>Senha</span><input id="sbSenha" type="password" autocomplete="current-password" placeholder="sua senha"></label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn primary" id="btnSbEntrar">Entrar</button>
-          <button class="btn" id="btnSbCriar">Criar conta</button>
-          <button class="btn ghost" id="btnSbTrocar">Trocar projeto</button>
-        </div>
-      </div>
-      <div class="hint" style="margin-top:12px">Sua senha é enviada apenas ao Supabase e nunca fica salva no aparelho.</div>`;
-  }
   const pend = pendentes();
   const txt = { ok:'Tudo sincronizado', pend:'Alterações aguardando envio', sync:'Sincronizando...',
                 erro:'Falha na última tentativa', off:'Desativado' }[statusSync] || '';
@@ -932,28 +997,10 @@ function ligarEventos(){
   const bt2=$('#btnTheme2'); if(bt2) bt2.onclick=alternarTema;
 
   // sincronização
-  const bconf=$('#btnSbConf');
-  if(bconf) bconf.onclick=()=>{
-    const u=$('#sbUrl').value.trim(), k=$('#sbKey').value.trim();
-    if(!/^https:\/\/.+\.supabase\.co/.test(u)) return toast('URL do projeto inválida');
-    if(k.length<30) return toast('Chave anon inválida');
-    SB.configurar(u,k); render(); toast('Projeto conectado — agora entre com seu e-mail');
-  };
-  const bentrar=$('#btnSbEntrar'), bcriar=$('#btnSbCriar');
-  const autenticar = async criar => {
-    const em=$('#sbEmail').value.trim(), se=$('#sbSenha').value;
-    if(!em || !se) return toast('Informe e-mail e senha');
-    const alvo = criar ? bcriar : bentrar;
-    alvo.disabled=true; alvo.textContent='Aguarde...';
-    try{ await sbEntrar(em, se, criar); render(); toast(criar?'Conta criada e dados enviados':'Conectado'); }
-    catch(e){ toast('Erro: '+e.message); alvo.disabled=false; alvo.textContent = criar?'Criar conta':'Entrar'; }
-  };
-  if(bentrar) bentrar.onclick=()=>autenticar(false);
-  if(bcriar)  bcriar.onclick=()=>autenticar(true);
-  const btrocar=$('#btnSbTrocar');
-  if(btrocar) btrocar.onclick=()=>{ localStorage.removeItem('sb-url'); localStorage.removeItem('sb-key'); render(); };
   const bsync=$('#btnSbSync'); if(bsync) bsync.onclick=()=>sincronizar(true);
-  const bsair=$('#btnSbSair'); if(bsair) bsair.onclick=()=>{ if(confirm('Sair da conta? Os dados continuam salvos neste aparelho.')) sbSair(); };
+  const bsair=$('#btnSbSair'); if(bsair) bsair.onclick=()=>{
+    if(confirm('Sair da conta? Você precisará entrar de novo com e-mail e senha.')) sbSair();
+  };
 }
 
 /* ============================ lançamentos ============================ */
@@ -1098,14 +1145,14 @@ function carregarExemplo(){
 
 /* ============================ sincronização (Supabase) ============================ */
 const SB = {
-  get url(){ return (localStorage.getItem('sb-url')||'').replace(/\/+$/,''); },
-  get key(){ return localStorage.getItem('sb-key')||''; },
+  get url(){ return (localStorage.getItem('sb-url') || SUPABASE.url || '').replace(/\/+$/,''); },
+  get key(){ return localStorage.getItem('sb-key') || SUPABASE.key || ''; },
   get sess(){ try{ return JSON.parse(localStorage.getItem('sb-session')||'null'); }catch(e){ return null; } },
   set sess(v){ v ? localStorage.setItem('sb-session', JSON.stringify(v)) : localStorage.removeItem('sb-session'); },
   get last(){ return localStorage.getItem('sb-last')||'1970-01-01T00:00:00+00:00'; },
   set last(v){ localStorage.setItem('sb-last', v); },
   configurar(url,key){ localStorage.setItem('sb-url',url.trim()); localStorage.setItem('sb-key',key.trim()); },
-  configurado(){ return !!(this.url && this.key); },
+  configurado(){ return !!(this.url && this.key) && this.key.indexOf('__') !== 0; },
   ligado(){ return this.configurado() && !!this.sess; },
   email(){ return (this.sess && this.sess.user && this.sess.user.email) || localStorage.getItem('sb-email') || ''; }
 };
@@ -1166,6 +1213,8 @@ async function sbEntrar(email, senha, criar){
   const caminho = criar ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password';
   const d = await sbFetch(caminho, {method:'POST', semAuth:true, body:JSON.stringify({email, password:senha})});
   if(!d || !d.access_token) throw new Error('confirme o e-mail recebido e depois entre normalmente');
+  const anterior = localStorage.getItem('sb-email');
+  if(anterior && anterior !== email) zerarLocal();   // conta diferente: não mistura dados
   SB.sess = d;
   localStorage.setItem('sb-email', email);
   SB.last = '1970-01-01T00:00:00+00:00';
@@ -1173,7 +1222,19 @@ async function sbEntrar(email, senha, criar){
   S.prefsDirty = true; save0();
   await sincronizar(true);
 }
-function sbSair(){ SB.sess=null; SB.last='1970-01-01T00:00:00+00:00'; setStatus('off'); render(); }
+function zerarLocal(){
+  const tema = S.theme;
+  S = JSON.parse(JSON.stringify(DEFAULTS));
+  S.theme = tema; save0();
+}
+function sbSair(){
+  SB.sess = null;
+  SB.last = '1970-01-01T00:00:00+00:00';
+  localStorage.removeItem('sb-syncedAt');
+  zerarLocal();
+  setStatus('off');
+  render();
+}
 
 function paraRemoto(r){
   const o = {...r};

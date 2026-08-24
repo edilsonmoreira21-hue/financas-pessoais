@@ -9,8 +9,17 @@
 | Banco (Supabase) | projeto `financas-pessoais` · `https://npooxxzrcalmvqodtydt.supabase.co` · região São Paulo |
 
 O esquema do banco já foi aplicado (4 tabelas, RLS ativo, 1 política por tabela).
-Falta apenas conectar o app: **Configurações → Sincronização na nuvem**, colar a chave
-publishable do Supabase e criar sua conta de acesso.
+Falta gravar a chave publishable no app — uma vez só, no computador:
+
+```bash
+./configurar-chave.sh sb_publishable_...
+```
+
+(A chave está em Supabase → Project Settings → API Keys → **Publishable key**. Nunca use a
+*secret key*: o script recusa se você tentar.)
+
+O script grava a chave no `index.html`, comita e publica. Depois disso, qualquer navegador —
+computador, celular, o de um amigo — abre direto numa **tela de senha**, sem configurar nada.
 
 Para publicar uma alteração no app depois de editar os arquivos:
 
@@ -35,9 +44,10 @@ Sem servidor próprio, sem build, sem npm.
 | `sw.js` | Service worker: abre o app offline |
 | `icone-192.png`, `icone-512.png` | Ícones do app |
 | `servidor-local.py` | Servidor local só para testar no computador |
+| `configurar-chave.sh` | Grava a chave publishable no app e publica |
 
-Funciona sem nada disso: abrindo o `index.html` direto, o app já roda e guarda tudo no
-navegador. A nuvem só é necessária para ver os mesmos dados no computador e no celular.
+O app exige entrar com e-mail e senha — é assim que ele sabe de quem são os dados e mantém
+computador e celular em sincronia.
 
 ## Passo 1 — criar o banco (5 minutos)
 
@@ -49,8 +59,13 @@ navegador. A nuvem só é necessária para ver os mesmos dados no computador e n
    - **Project URL** — algo como `https://abcdefgh.supabase.co`
    - **anon public** — a chave longa que começa com `eyJ...`
 
-> A chave `anon` é pública por natureza. Quem protege os dados é o RLS que o `supabase.sql`
-> ativou: cada conta só enxerga as próprias linhas.
+> A chave publishable é pública por natureza — pode ficar no HTML e no repositório. Quem
+> protege os dados é o RLS que o `supabase.sql` ativou: cada conta só enxerga as próprias
+> linhas. A *secret key* é outra coisa e nunca deve sair do painel do Supabase.
+>
+> Como o cadastro do Supabase vem aberto por padrão, depois de criar a sua conta vale
+> desligar novos cadastros em **Authentication → Sign In / Providers**. Ninguém consegue ver
+> seus dados de qualquer forma, mas isso evita que estranhos consumam sua cota.
 
 ## Passo 2 — publicar o app (5 minutos)
 
@@ -63,15 +78,22 @@ rápido é o **Cloudflare Pages**:
 
 Alternativas equivalentes: Netlify Drop (<https://app.netlify.com/drop>) ou GitHub Pages.
 
-## Passo 3 — conectar e entrar
+## Passo 3 — gravar a chave e entrar
 
-No app publicado, abra **Configurações → Sincronização na nuvem**:
+A chave publishable vive dentro do `index.html`, então ela é configurada **uma vez** e vale
+para todos os aparelhos:
 
-1. Cole a **Project URL** e a chave **anon public** → *Salvar conexão*.
-2. Digite seu e-mail e uma senha → **Criar conta** (só na primeira vez; depois é *Entrar*).
-3. Tudo o que já existia no aparelho sobe para a nuvem automaticamente.
+```bash
+./configurar-chave.sh sb_publishable_...
+```
 
-No outro aparelho, repita os passos 1 e 2 usando **Entrar** — os dados descem sozinhos.
+Depois é só abrir o endereço publicado: aparece a tela de entrada.
+
+1. Digite e-mail e senha → **Criar conta** (só na primeira vez; depois é *Entrar*).
+2. No outro aparelho, mesma tela, botão **Entrar** — os dados descem sozinhos.
+
+A sessão fica salva no aparelho, então você não digita a senha toda vez: só ao trocar de
+navegador ou depois de sair da conta.
 
 > Se o Supabase pedir confirmação por e-mail ao criar a conta, confirme pelo link recebido e
 > depois use **Entrar**. Para dispensar essa etapa: Authentication → Sign In / Providers →
@@ -86,6 +108,8 @@ O ícone vai para a tela inicial e o app abre em tela cheia, sem barra de navega
 
 ## Como a sincronização funciona
 
+- O app abre numa tela de senha; a sessão fica guardada no aparelho, e sair da conta apaga o
+  cache local — outra pessoa que entre na sua máquina não vê seus lançamentos.
 - O aparelho continua sendo a fonte imediata: tudo é gravado primeiro no `localStorage`, então
   o app abre instantâneo e funciona **sem internet**.
 - Cada alteração fica marcada como pendente e sobe sozinha 2,5 segundos depois, ao voltar a
