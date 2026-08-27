@@ -40,6 +40,12 @@ if [ -d .git ]; then
   git add index.html
   git commit -q -m "Configura o projeto Firebase" || true
 
+  # o chaveiro do macOS guarda a conta de trabalho e responde antes do gh;
+  # neste repositório só o gh atende, e a conta pessoal é ativada durante o push
+  git config --local credential.helper "" 2>/dev/null || true
+  git config --local --get-all credential.helper | grep -q 'gh auth git-credential' \
+    || git config --local --add credential.helper '!gh auth git-credential'
+
   ANTES=$(gh auth status 2>/dev/null | grep -B1 'Active account: true' | grep 'Logged in to' | sed 's/.*account //;s/ .*//' || true)
   gh auth switch --user edilsonmoreira21-hue >/dev/null 2>&1 || true
   if git push -q 2>/dev/null; then
