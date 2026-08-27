@@ -41,6 +41,21 @@ create table if not exists public.metas (
   atualizado_em  timestamptz not null default now()
 );
 
+-- ---------- dívidas (empréstimos, financiamentos, compras parceladas) ----------
+create table if not exists public.dividas (
+  id             text primary key,
+  user_id        uuid not null default auth.uid() references auth.users on delete cascade,
+  nome           text not null,
+  credor         text,
+  parcela        numeric(14,2) not null default 0,
+  atual          integer not null default 1,
+  total          integer not null default 1,
+  proxima        date not null,
+  lancar         boolean not null default true,
+  deletado       boolean not null default false,
+  atualizado_em  timestamptz not null default now()
+);
+
 -- ---------- preferências (categorias e contas) ----------
 create table if not exists public.preferencias (
   user_id        uuid primary key default auth.uid() references auth.users on delete cascade,
@@ -53,6 +68,7 @@ create index if not exists idx_transacoes_sync on public.transacoes (user_id, at
 create index if not exists idx_transacoes_data on public.transacoes (user_id, data);
 create index if not exists idx_orcamentos_sync on public.orcamentos (user_id, atualizado_em);
 create index if not exists idx_metas_sync      on public.metas      (user_id, atualizado_em);
+create index if not exists idx_dividas_sync    on public.dividas    (user_id, atualizado_em);
 
 -- ============================================================
 --  Segurança: cada conta só enxerga as próprias linhas.
@@ -61,11 +77,13 @@ create index if not exists idx_metas_sync      on public.metas      (user_id, at
 alter table public.transacoes   enable row level security;
 alter table public.orcamentos   enable row level security;
 alter table public.metas        enable row level security;
+alter table public.dividas      enable row level security;
 alter table public.preferencias enable row level security;
 
 drop policy if exists "dono das transacoes"   on public.transacoes;
 drop policy if exists "dono dos orcamentos"   on public.orcamentos;
 drop policy if exists "dono das metas"        on public.metas;
+drop policy if exists "dono das dividas"      on public.dividas;
 drop policy if exists "dono das preferencias" on public.preferencias;
 
 create policy "dono das transacoes" on public.transacoes
@@ -75,6 +93,9 @@ create policy "dono dos orcamentos" on public.orcamentos
   for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "dono das metas" on public.metas
+  for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "dono das dividas" on public.dividas
   for all to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "dono das preferencias" on public.preferencias

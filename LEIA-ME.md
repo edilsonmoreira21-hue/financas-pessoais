@@ -106,6 +106,20 @@ navegador ou depois de sair da conta.
 
 O ícone vai para a tela inicial e o app abre em tela cheia, sem barra de navegador.
 
+## Aba de dívidas
+
+Empréstimos, financiamentos e compras parceladas ficam na aba **Dívidas**. De cada uma o app
+guarda o valor da parcela, a parcela atual, o total de parcelas e a data da próxima — e calcula
+sozinho o saldo devedor, quantas faltam e o mês em que a dívida termina.
+
+O botão **Registrar pagamento** avança uma parcela, empurra o vencimento para o mês seguinte e
+lança a despesa correspondente na categoria *Dívidas* (dá para desligar esse lançamento
+automático no formulário da dívida).
+
+> Se você criou o banco antes desta aba existir, rode o `supabase.sql` de novo no SQL Editor —
+> ele só acrescenta a tabela `dividas`, sem tocar no que já existe. Até lá o app continua
+> funcionando normalmente e guarda as dívidas apenas no aparelho.
+
 ## Como a sincronização funciona
 
 - O app abre numa tela de senha; a sessão fica guardada no aparelho, e sair da conta apaga o

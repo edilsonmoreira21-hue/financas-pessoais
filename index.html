@@ -223,6 +223,7 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
       <button data-view="dashboard" class="active">Painel</button>
       <button data-view="lancamentos">Lançamentos</button>
       <button data-view="orcamentos">Orçamentos</button>
+      <button data-view="dividas">Dívidas</button>
       <button data-view="metas">Metas</button>
       <button data-view="config">Configurações</button>
     </nav>
@@ -250,6 +251,35 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
       </div>
       <label style="display:flex;align-items:center;gap:9px;font-size:14px">
         <input type="checkbox" name="fixo" style="width:auto"> Lançamento fixo (repete todo mês)
+      </label>
+    </div>
+    <div class="dlg-foot">
+      <button class="btn" value="cancel" type="submit" formnovalidate>Cancelar</button>
+      <button class="btn primary" value="ok" type="submit">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgDivida">
+  <form method="dialog" id="formDivida">
+    <div class="dlg-head"><h2 style="font-size:17px" id="dlgDividaTitulo">Nova dívida</h2></div>
+    <div class="dlg-body">
+      <input type="hidden" name="id">
+      <div class="row-2">
+        <label class="field"><span>Descrição</span><input name="nome" required placeholder="Ex.: Financiamento do carro"></label>
+        <label class="field"><span>Instituição</span><input name="credor" placeholder="Ex.: Banco X"></label>
+      </div>
+      <div class="row-2">
+        <label class="field"><span>Valor da parcela (R$)</span><input name="parcela" type="number" step="0.01" min="0" required placeholder="0,00"></label>
+        <label class="field"><span>Próxima parcela vence em</span><input name="proxima" type="date" required></label>
+      </div>
+      <div class="row-2">
+        <label class="field"><span>Parcela atual</span><input name="atual" type="number" min="1" step="1" required placeholder="13"></label>
+        <label class="field"><span>Total de parcelas</span><input name="total" type="number" min="1" step="1" required placeholder="60"></label>
+      </div>
+      <div class="hint">A parcela atual é a próxima a pagar. Se já pagou 12 de 60, informe 13 e 60.</div>
+      <label style="display:flex;align-items:center;gap:9px;font-size:14px">
+        <input type="checkbox" name="lancar" style="width:auto" checked> Lançar a despesa automaticamente ao registrar pagamento
       </label>
     </div>
     <div class="dlg-foot">
@@ -300,6 +330,7 @@ const DEFAULTS = {
   tx: [],
   budgets: [],
   goals: [],
+  dividas: [],
   prefsAt: '',
   cats: {
     despesa: ['Moradia','Alimentação','Transporte','Saúde','Educação','Lazer','Compras','Assinaturas','Contas','Outros'],
@@ -325,7 +356,7 @@ function normalizar(st){
   if(st.budgets && !Array.isArray(st.budgets)){
     st.budgets = Object.entries(st.budgets).map(([categoria,limite])=>({categoria, limite:+limite}));
   }
-  ['tx','goals','budgets'].forEach(k=>{
+  ['tx','goals','budgets','dividas'].forEach(k=>{
     (st[k]||[]).forEach(r=>{
       if(r.deletado===undefined) r.deletado=false;
       if(!r.atualizado_em){ r.atualizado_em=agora(); r._d=true; }
@@ -391,7 +422,31 @@ function setLimite(cat, v){
   if(!b){ b={categoria:cat, limite:0}; S.budgets.push(b); }
   b.limite=v; b.deletado = !(v>0); b.atualizado_em=agora(); b._d=true;
 }
+const DIVIDAS = () => S.dividas.filter(d=>!d.deletado);
 const doMes  = ym => TX().filter(t => t.data.slice(0,7) === ym);
+
+/* soma n meses a uma data ISO, respeitando meses curtos (31/01 + 1 mês = 28/02) */
+function dataMaisMeses(iso, n){
+  const [a,m,d] = iso.split('-').map(Number);
+  const ultimo = new Date(a, m-1+n+1, 0).getDate();
+  const alvo = new Date(a, m-1+n, Math.min(d, ultimo));
+  return alvo.getFullYear()+'-'+String(alvo.getMonth()+1).padStart(2,'0')+'-'+String(alvo.getDate()).padStart(2,'0');
+}
+/* tudo o que se calcula a partir de uma dívida */
+function contasDivida(d){
+  const total = +d.total || 0, atual = +d.atual || 1, valor = +d.parcela || 0;
+  const quitada = atual > total;
+  const restantes = Math.max(0, total - atual + 1);
+  const pagas = Math.min(total, atual - 1);
+  return {
+    total, atual, valor, quitada, restantes, pagas,
+    pago: pagas * valor,
+    saldo: restantes * valor,
+    contratado: total * valor,
+    pct: total ? (pagas / total * 100) : 0,
+    ultima: quitada ? null : dataMaisMeses(d.proxima, restantes - 1)
+  };
+}
 const soma   = arr => arr.reduce((s,t)=>s+(+t.valor||0),0);
 const receitas = ym => soma(doMes(ym).filter(t=>t.tipo==='receita'));
 const despesas = ym => soma(doMes(ym).filter(t=>t.tipo==='despesa'));
@@ -505,7 +560,7 @@ function render(){
   $$('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
   popularMeses();
   const el=$('#view');
-  el.innerHTML = ({dashboard:vDashboard, lancamentos:vLancamentos, orcamentos:vOrcamentos, metas:vMetas, config:vConfig})[view]();
+  el.innerHTML = ({dashboard:vDashboard, lancamentos:vLancamentos, orcamentos:vOrcamentos, dividas:vDividas, metas:vMetas, config:vConfig})[view]();
   ligarEventos();
   if(view==='dashboard'){
     requestAnimationFrame(()=>{
@@ -667,6 +722,34 @@ function vDashboard(){
     </div>
   </div>
 
+  ${(()=>{
+    const ativas = DIVIDAS().map(d=>({d,c:contasDivida(d)})).filter(x=>!x.c.quitada)
+                            .sort((a,b)=>a.d.proxima.localeCompare(b.d.proxima));
+    if(!ativas.length) return '';
+    const saldo = ativas.reduce((s,x)=>s+x.c.saldo,0);
+    const mensal = ativas.reduce((s,x)=>s+x.c.valor,0);
+    return `
+    <div class="card" style="margin-bottom:16px">
+      <h3>Dívidas em andamento</h3>
+      <div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:14px;font-size:14px">
+        <span>Saldo devedor <b>${fmt(saldo)}</b></span>
+        <span>Compromisso mensal <b>${fmt(mensal)}</b></span>
+      </div>
+      <div class="list">
+        ${ativas.slice(0,4).map(({d,c})=>`
+          <div class="item">
+            <div class="ico" style="background:var(--red-soft)">🏦</div>
+            <div class="txt">
+              <div class="t">${esc(d.nome)}</div>
+              <div class="s">parcela ${c.atual}/${c.total} · próxima em ${dataBR(d.proxima)} · termina em ${mesLabel(c.ultima.slice(0,7))}</div>
+            </div>
+            <div class="amt neg">${fmt(c.saldo)}</div>
+          </div>`).join('')}
+      </div>
+      <button class="btn ghost sm" data-goto="dividas" style="margin-top:12px">Ver dívidas →</button>
+    </div>`;
+  })()}
+
   <div class="card">
     <h3>Evolução do patrimônio — 12 meses</h3>
     <canvas id="cLinha" style="height:220px"></canvas>
@@ -795,6 +878,92 @@ function vOrcamentos(){
   </div>`;
 }
 
+function vDividas(){
+  const lista = DIVIDAS().map(d=>({d, c:contasDivida(d)}));
+  const ativas = lista.filter(x=>!x.c.quitada).sort((a,b)=>a.d.proxima.localeCompare(b.d.proxima));
+  const quitadas = lista.filter(x=>x.c.quitada);
+  const mensal = ativas.reduce((s,x)=>s+x.c.valor,0);
+  const saldo  = ativas.reduce((s,x)=>s+x.c.saldo,0);
+  const fim    = ativas.map(x=>x.c.ultima).sort().pop();
+  const rec    = receitas(mes);
+  const compromisso = rec>0 ? mensal/rec*100 : 0;
+
+  const cartao = ({d,c}) => `
+    <div class="card" style="box-shadow:none">
+      <div style="display:flex;align-items:start;gap:10px;margin-bottom:12px">
+        <div style="flex:1;min-width:0">
+          <b>${esc(d.nome)}</b>${c.quitada?' <span class="tag in">quitada</span>':''}
+          <div class="hint">${d.credor ? esc(d.credor)+' · ' : ''}${c.total} parcelas de ${fmt(c.valor)}</div>
+        </div>
+        <div style="white-space:nowrap">
+          <button class="btn ghost sm" data-editdiv="${d.id}">✏️</button>
+          <button class="btn ghost sm danger" data-deldiv="${d.id}">🗑</button>
+        </div>
+      </div>
+
+      ${c.quitada ? `<div class="hint">Você pagou as ${c.total} parcelas — ${fmt(c.contratado)} no total.</div>`
+      : `
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <div style="font-size:22px;font-weight:700">${fmt(c.saldo)}</div>
+        <div class="hint">ainda a pagar</div>
+      </div>
+      <div class="hint" style="margin:8px 0 10px">
+        Parcela <b>${c.atual}</b> de ${c.total} · faltam ${c.restantes}
+      </div>
+      <div class="bar"><i style="width:${c.pct}%"></i></div>
+      <div class="hint" style="margin-top:8px">${c.pct.toFixed(0)}% pago (${fmt(c.pago)} de ${fmt(c.contratado)})</div>
+
+      <div style="display:flex;gap:10px;margin:14px 0;font-size:13.5px;flex-wrap:wrap">
+        <div style="flex:1 1 130px;background:var(--surface-2);border-radius:10px;padding:9px 11px">
+          <div class="hint">Próxima parcela</div>
+          <b>${dataBR(d.proxima)}</b>
+        </div>
+        <div style="flex:1 1 130px;background:var(--surface-2);border-radius:10px;padding:9px 11px">
+          <div class="hint">Previsão de término</div>
+          <b>${dataBR(c.ultima)}</b>
+        </div>
+      </div>
+      <button class="btn sm" data-pagardiv="${d.id}" style="width:100%">✓ Registrar pagamento da parcela ${c.atual}</button>`}
+    </div>`;
+
+  return `
+  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div><h3 style="margin:0">Dívidas</h3>
+      <div class="hint">Empréstimos, financiamentos e compras parceladas.</div></div>
+    <div style="flex:1"></div>
+    <button class="btn primary" id="btnNovaDivida">+ Nova dívida</button>
+  </div>
+
+  ${ativas.length ? `
+  <div class="grid kpis" style="margin-bottom:16px">
+    <div class="card kpi">
+      <div class="label"><span class="dot" style="background:var(--red)"></span> Saldo devedor</div>
+      <div class="value">${fmt(saldo)}</div>
+      <div class="foot">${ativas.length} dívida(s) em andamento</div>
+    </div>
+    <div class="card kpi">
+      <div class="label"><span class="dot" style="background:var(--amber)"></span> Compromisso mensal</div>
+      <div class="value">${fmt(mensal)}</div>
+      <div class="foot">${rec>0 ? compromisso.toFixed(0)+'% das receitas de '+mesLabel(mes) : 'sem receitas lançadas no mês'}</div>
+    </div>
+    <div class="card kpi">
+      <div class="label"><span class="dot" style="background:var(--brand)"></span> Livre de dívidas em</div>
+      <div class="value" style="font-size:22px">${mesLongo(fim.slice(0,7))}</div>
+      <div class="foot">quando a última parcela cair</div>
+    </div>
+  </div>` : ''}
+
+  ${lista.length ? `
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+      ${ativas.map(cartao).join('')}
+      ${quitadas.map(cartao).join('')}
+    </div>`
+  : `<div class="card"><div class="empty"><div class="big">🏦</div>
+      Nenhuma dívida cadastrada.<br>
+      Cadastre um financiamento ou empréstimo para acompanhar quanto falta e quando termina.
+    </div></div>`}`;
+}
+
 function vMetas(){
   return `
   <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -890,7 +1059,7 @@ function vConfig(){
       <div class="card" style="margin-bottom:16px">
         <h3>Dados</h3>
         <div class="hint" style="margin-bottom:14px">
-          ${n} lançamento(s), ${METAS().length} meta(s).
+          ${n} lançamento(s), ${DIVIDAS().length} dívida(s), ${METAS().length} meta(s).
           ${SB.ligado()
             ? 'Salvo neste aparelho e sincronizado com a sua conta na nuvem.'
             : 'Tudo fica salvo apenas neste navegador (localStorage).'}
@@ -945,6 +1114,17 @@ function ligarEventos(){
     setLimite(inp.dataset.budget, parseFloat(e.target.value)||0);
     save(); render(); toast('Orçamento atualizado');
   });
+
+  // dívidas
+  const bnd=$('#btnNovaDivida'); if(bnd) bnd.onclick=()=>abrirDivida();
+  $$('[data-editdiv]').forEach(b=>b.onclick=()=>abrirDivida(S.dividas.find(d=>d.id===b.dataset.editdiv)));
+  $$('[data-deldiv]').forEach(b=>b.onclick=()=>{
+    const d=S.dividas.find(x=>x.id===b.dataset.deldiv);
+    if(confirm(`Excluir "${d.nome}"? Os lançamentos já registrados continuam no histórico.`)){
+      d.deletado=true; d.atualizado_em=agora(); d._d=true; save(); render(); toast('Dívida excluída');
+    }
+  });
+  $$('[data-pagardiv]').forEach(b=>b.onclick=()=>registrarPagamento(b.dataset.pagardiv));
 
   // metas
   const bm=$('#btnNovaMeta'); if(bm) bm.onclick=()=>{ $('#formMeta').reset(); $('#dlgMeta').showModal(); };
@@ -1047,6 +1227,67 @@ $('#formTx').addEventListener('submit', e=>{
   render(); toast(d.id?'Lançamento atualizado':'Lançamento salvo');
 });
 $$('#segTipo button').forEach(b=>b.onclick=()=>setTipo(b.dataset.v));
+
+function abrirDivida(d){
+  const f=$('#formDivida'); f.reset();
+  $('#dlgDividaTitulo').textContent = d ? 'Editar dívida' : 'Nova dívida';
+  f.id.value      = d ? d.id : '';
+  f.nome.value    = d ? d.nome : '';
+  f.credor.value  = d ? (d.credor||'') : '';
+  f.parcela.value = d ? d.parcela : '';
+  f.atual.value   = d ? d.atual : 1;
+  f.total.value   = d ? d.total : '';
+  f.proxima.value = d ? d.proxima : todayISO();
+  f.lancar.checked = d ? d.lancar !== false : true;
+  $('#dlgDivida').showModal();
+  setTimeout(()=>f.nome.focus(),50);
+}
+
+$('#formDivida').addEventListener('submit', e=>{
+  if(e.submitter && e.submitter.value==='cancel') return;
+  const d = Object.fromEntries(new FormData(e.target));
+  const total = Math.max(1, parseInt(d.total)||1);
+  const atual = Math.min(total+1, Math.max(1, parseInt(d.atual)||1));
+  const divida = {
+    id: d.id || uid(),
+    nome: d.nome.trim(),
+    credor: (d.credor||'').trim(),
+    parcela: Math.abs(parseFloat(d.parcela)||0),
+    atual, total,
+    proxima: d.proxima,
+    lancar: !!d.lancar,
+    deletado: false,
+    atualizado_em: agora(),
+    _d: true
+  };
+  if(d.id) S.dividas = S.dividas.map(x => x.id===d.id ? divida : x);
+  else S.dividas.push(divida);
+  save(); render();
+  toast(d.id ? 'Dívida atualizada' : 'Dívida cadastrada');
+});
+
+function registrarPagamento(id){
+  const d = S.dividas.find(x=>x.id===id);
+  const c = contasDivida(d);
+  const vaiLancar = d.lancar !== false;
+  const aviso = `Registrar o pagamento da parcela ${c.atual} de ${c.total} (${fmt(c.valor)})?` +
+                (vaiLancar ? '\n\nUma despesa será lançada em ' + dataBR(d.proxima) + '.' : '');
+  if(!confirm(aviso)) return;
+
+  if(vaiLancar){
+    if(!S.cats.despesa.includes('Dívidas')){ S.cats.despesa.push('Dívidas'); tocarPrefs(); }
+    S.tx.push({
+      id: uid(), tipo:'despesa', valor: c.valor, data: d.proxima,
+      categoria: 'Dívidas', descricao: `${d.nome} — parcela ${c.atual}/${c.total}`,
+      conta: '', fixo: false, deletado:false, atualizado_em: agora(), _d: true
+    });
+  }
+  d.atual = c.atual + 1;
+  if(d.atual <= c.total) d.proxima = dataMaisMeses(d.proxima, 1);
+  d.atualizado_em = agora(); d._d = true;
+  save(); render();
+  toast(d.atual > c.total ? 'Dívida quitada! 🎉' : `Parcela ${c.atual} registrada`);
+}
 
 $('#formMeta').addEventListener('submit', e=>{
   if(e.submitter && e.submitter.value==='cancel') return;
@@ -1159,8 +1400,12 @@ const SB = {
 const TABELAS = [
   { nome:'transacoes', chave:'tx',      pk:['id'] },
   { nome:'metas',      chave:'goals',   pk:['id'] },
-  { nome:'orcamentos', chave:'budgets', pk:['categoria'] }
+  { nome:'orcamentos', chave:'budgets', pk:['categoria'] },
+  /* opcional: quem criou o banco antes da aba de dívidas ainda não tem esta tabela.
+     Enquanto ela não existir, o app funciona e guarda as dívidas só no aparelho. */
+  { nome:'dividas',    chave:'dividas', pk:['id'], opcional:true }
 ];
+let avisouTabela = false;
 let statusSync = 'off', timerSync = null;
 
 function pendentes(){
@@ -1302,8 +1547,22 @@ async function sincronizar(manual){
   setStatus('sync');
   try{
     let mudou = 0, maior = SB.last;
-    for(const t of TABELAS) mudou += await empurrar(t);
-    for(const t of TABELAS){ const r = await puxar(t); mudou += r.n; if(r.maior > maior) maior = r.maior; }
+    /* uma tabela opcional que ainda não existe no banco não pode derrubar a sincronização */
+    const tolerar = async (t, fn) => {
+      try{ return await fn(); }
+      catch(e){
+        if(t.opcional && /(does not exist|find the table|schema cache|PGRST205|PGRST20[0-9])/i.test(e.message)){
+          if(!avisouTabela){ avisouTabela = true; console.warn('tabela ausente no banco:', t.nome, '— rode supabase.sql de novo'); }
+          return null;
+        }
+        throw e;
+      }
+    };
+    for(const t of TABELAS) mudou += await tolerar(t, ()=>empurrar(t)) || 0;
+    for(const t of TABELAS){
+      const r = await tolerar(t, ()=>puxar(t));
+      if(r){ mudou += r.n; if(r.maior > maior) maior = r.maior; }
+    }
     mudou += await sincronizarPrefs();
     SB.last = maior;
     limparLixeira();
