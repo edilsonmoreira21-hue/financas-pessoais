@@ -311,11 +311,11 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
 <div class="toast" id="toast"></div>
 <script>
 /* ============================ configuração do projeto ============================ */
-/* A chave publishable é feita para viver no navegador: quem protege os dados é o RLS
-   do banco (cada conta só enxerga as próprias linhas). Trocar a chave: ./configurar-chave.sh */
-const SUPABASE = {
-  url: 'https://npooxxzrcalmvqodtydt.supabase.co',
-  key: '__CHAVE_PUBLISHABLE__' // chave publishable
+/* A chave web do Firebase é feita para viver no navegador: quem protege os dados são as
+   Security Rules (cada conta só enxerga users/{seu uid}). Configurar: ./configurar-firebase.sh */
+const FIREBASE = {
+  apiKey: '__API_KEY__',      // chave web
+  projectId: '__PROJECT_ID__' // id do projeto
 };
 
 /* ============================ estado ============================ */
@@ -550,7 +550,7 @@ function linha(cv, meses){
 
 /* ============================ views ============================ */
 function render(){
-  const logado = SB.ligado();
+  const logado = NUVEM.ligado();
   $('header.top').style.display = logado ? '' : 'none';
   if(!logado){
     $('#view').innerHTML = telaLogin();
@@ -574,7 +574,7 @@ function render(){
 }
 
 function telaLogin(){
-  const semChave = !SB.configurado();
+  const semChave = !NUVEM.configurado();
   return `
   <div class="login-wrap"><div class="login">
     <div class="marca">
@@ -586,7 +586,7 @@ function telaLogin(){
     </div>
     <div class="card">
       ${semChave ? `<div class="aviso">Este app ainda não está ligado a um banco.
-         Rode <b>./configurar-chave.sh</b> com a chave publishable do Supabase.</div>` : ''}
+         Rode <b>./configurar-firebase.sh</b> com a chave web e o id do projeto Firebase.</div>` : ''}
       <div id="loginErro"></div>
       <label class="field"><span>E-mail</span>
         <input id="loginEmail" type="email" autocomplete="username" placeholder="voce@email.com" ${semChave?'disabled':''}></label>
@@ -613,16 +613,11 @@ function eventosLogin(){
     const rotulo = alvo.textContent;
     erro(''); alvo.disabled = true; alvo.textContent = 'Aguarde...';
     try{
-      await sbEntrar(em, se, criar);
+      await entrarNuvem(em, se, criar);
       render();
       toast(criar ? 'Conta criada' : 'Bem-vindo de volta');
     }catch(e){
-      const m = /invalid login/i.test(e.message) ? 'E-mail ou senha incorretos.'
-              : /already registered/i.test(e.message) ? 'Este e-mail já tem conta — use Entrar.'
-              : /confirme/i.test(e.message) ? 'Confirme o e-mail que o Supabase enviou e depois use Entrar.'
-              : /password/i.test(e.message) ? 'A senha precisa de pelo menos 6 caracteres.'
-              : e.message;
-      erro(m);
+      erro(e.message);
       alvo.disabled = false; alvo.textContent = rotulo;
     }
   };
@@ -631,7 +626,7 @@ function eventosLogin(){
   $('#loginSenha').onkeydown = e => { if(e.key === 'Enter') autenticar(false); };
   $('#loginEmail').onkeydown = e => { if(e.key === 'Enter') $('#loginSenha').focus(); };
   const em = $('#loginEmail');
-  if(em && !em.disabled){ em.value = localStorage.getItem('sb-email') || ''; (em.value ? $('#loginSenha') : em).focus(); }
+  if(em && !em.disabled){ em.value = localStorage.getItem('fb-email') || ''; (em.value ? $('#loginSenha') : em).focus(); }
 }
 
 function popularMeses(){
@@ -1002,7 +997,7 @@ function vMetas(){
 }
 
 function cardSync(){
-  const ultima = localStorage.getItem('sb-syncedAt');
+  const ultima = localStorage.getItem('fb-syncedAt');
   const pend = pendentes();
   const txt = { ok:'Tudo sincronizado', pend:'Alterações aguardando envio', sync:'Sincronizando...',
                 erro:'Falha na última tentativa', off:'Desativado' }[statusSync] || '';
@@ -1010,8 +1005,8 @@ function cardSync(){
   return `
     <div class="sync-status"><span class="dot" style="background:${cor}"></span> ${txt}${pend?` — ${pend} item(ns)`:''}</div>
     <div class="hint" style="margin-bottom:14px">
-      Conta: <b>${esc(SB.email())}</b><br>
-      Projeto: ${esc(SB.url)}<br>
+      Conta: <b>${esc(NUVEM.email())}</b><br>
+      Projeto Firebase: ${esc(NUVEM.projeto)}<br>
       Última sincronização: ${ultima ? new Date(ultima).toLocaleString('pt-BR') : 'ainda não sincronizado'}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1060,7 +1055,7 @@ function vConfig(){
         <h3>Dados</h3>
         <div class="hint" style="margin-bottom:14px">
           ${n} lançamento(s), ${DIVIDAS().length} dívida(s), ${METAS().length} meta(s).
-          ${SB.ligado()
+          ${NUVEM.ligado()
             ? 'Salvo neste aparelho e sincronizado com a sua conta na nuvem.'
             : 'Tudo fica salvo apenas neste navegador (localStorage).'}
         </div>
@@ -1179,7 +1174,7 @@ function ligarEventos(){
   // sincronização
   const bsync=$('#btnSbSync'); if(bsync) bsync.onclick=()=>sincronizar(true);
   const bsair=$('#btnSbSair'); if(bsair) bsair.onclick=()=>{
-    if(confirm('Sair da conta? Você precisará entrar de novo com e-mail e senha.')) sbSair();
+    if(confirm('Sair da conta? Você precisará entrar de novo com e-mail e senha.')) sairNuvem();
   };
 }
 
@@ -1384,37 +1379,36 @@ function carregarExemplo(){
   save(); render(); toast('Dados de exemplo carregados');
 }
 
-/* ============================ sincronização (Supabase) ============================ */
-const SB = {
-  get url(){ return (localStorage.getItem('sb-url') || SUPABASE.url || '').replace(/\/+$/,''); },
-  get key(){ return localStorage.getItem('sb-key') || SUPABASE.key || ''; },
-  get sess(){ try{ return JSON.parse(localStorage.getItem('sb-session')||'null'); }catch(e){ return null; } },
-  set sess(v){ v ? localStorage.setItem('sb-session', JSON.stringify(v)) : localStorage.removeItem('sb-session'); },
-  get last(){ return localStorage.getItem('sb-last')||'1970-01-01T00:00:00+00:00'; },
-  set last(v){ localStorage.setItem('sb-last', v); },
-  configurar(url,key){ localStorage.setItem('sb-url',url.trim()); localStorage.setItem('sb-key',key.trim()); },
-  configurado(){ return !!(this.url && this.key) && this.key.indexOf('__') !== 0; },
+/* ============================ sincronização (Firebase) ============================ */
+const NUVEM = {
+  get apiKey(){ return localStorage.getItem('fb-key') || FIREBASE.apiKey || ''; },
+  get projeto(){ return localStorage.getItem('fb-projeto') || FIREBASE.projectId || ''; },
+  get sess(){ try{ return JSON.parse(localStorage.getItem('fb-session')||'null'); }catch(e){ return null; } },
+  set sess(v){ v ? localStorage.setItem('fb-session', JSON.stringify(v)) : localStorage.removeItem('fb-session'); },
+  get last(){ return localStorage.getItem('fb-last') || '1970-01-01T00:00:00.000Z'; },
+  set last(v){ localStorage.setItem('fb-last', v); },
+  configurado(){ return !!(this.apiKey && this.projeto) && this.apiKey.indexOf('__') !== 0 && this.projeto.indexOf('__') !== 0; },
   ligado(){ return this.configurado() && !!this.sess; },
-  email(){ return (this.sess && this.sess.user && this.sess.user.email) || localStorage.getItem('sb-email') || ''; }
+  uid(){ return this.sess ? this.sess.uid : ''; },
+  email(){ return (this.sess && this.sess.email) || localStorage.getItem('fb-email') || ''; }
 };
-const TABELAS = [
+
+/* uma coleção por tipo de registro, dentro de users/{uid} */
+const COLECOES = [
   { nome:'transacoes', chave:'tx',      pk:['id'] },
   { nome:'metas',      chave:'goals',   pk:['id'] },
   { nome:'orcamentos', chave:'budgets', pk:['categoria'] },
-  /* opcional: quem criou o banco antes da aba de dívidas ainda não tem esta tabela.
-     Enquanto ela não existir, o app funciona e guarda as dívidas só no aparelho. */
-  { nome:'dividas',    chave:'dividas', pk:['id'], opcional:true }
+  { nome:'dividas',    chave:'dividas', pk:['id'] }
 ];
-let avisouTabela = false;
 let statusSync = 'off', timerSync = null;
 
 function pendentes(){
-  return TABELAS.reduce((n,t)=> n + S[t.chave].filter(r=>r._d).length, 0) + (S.prefsDirty?1:0);
+  return COLECOES.reduce((n,c)=> n + S[c.chave].filter(r=>r._d).length, 0) + (S.prefsDirty?1:0);
 }
 function setStatus(st){
   statusSync = st;
   const p = $('#pillSync'); if(!p) return;
-  const map = { off:['☁','Sincronização desativada — configure em Configurações',''],
+  const map = { off:['☁','Sincronização desativada',''],
                 ok:['☁','Tudo sincronizado','ok'],
                 pend:['⏳','Alterações pendentes de envio','pend'],
                 sync:['⟳','Sincronizando...',''],
@@ -1424,46 +1418,64 @@ function setStatus(st){
 }
 function tocarPrefs(){ S.prefsAt = agora(); S.prefsDirty = true; }
 function agendarSync(){
-  if(!SB.ligado()){ setStatus('off'); return; }
+  if(!NUVEM.ligado()){ setStatus('off'); return; }
   if(pendentes()) setStatus('pend');
   clearTimeout(timerSync);
   timerSync = setTimeout(()=>sincronizar(), 2500);
 }
 
-async function sbFetch(caminho, opts={}){
-  const h = Object.assign({ apikey: SB.key, 'Content-Type':'application/json' }, opts.headers||{});
-  if(SB.sess && !opts.semAuth) h.Authorization = 'Bearer ' + SB.sess.access_token;
-  const r = await fetch(SB.url + caminho, {...opts, headers:h});
-  if(r.status===401 && SB.sess && SB.sess.refresh_token && !opts._retry){
-    await renovarSessao();
-    return sbFetch(caminho, {...opts, _retry:true});
-  }
-  if(!r.ok){
-    let msg = await r.text();
-    try{ const j=JSON.parse(msg); msg = j.message || j.error_description || j.msg || j.hint || msg; }catch(e){}
-    throw new Error(String(msg).slice(0,180));
-  }
-  const txt = await r.text();
-  return txt ? JSON.parse(txt) : null;
+/* ---------------------------- autenticação ---------------------------- */
+const ERROS = {
+  EMAIL_EXISTS: 'Este e-mail já tem conta — use Entrar.',
+  EMAIL_NOT_FOUND: 'Não encontrei uma conta com este e-mail.',
+  INVALID_PASSWORD: 'E-mail ou senha incorretos.',
+  INVALID_LOGIN_CREDENTIALS: 'E-mail ou senha incorretos.',
+  INVALID_EMAIL: 'E-mail inválido.',
+  MISSING_PASSWORD: 'Informe a senha.',
+  USER_DISABLED: 'Esta conta foi desativada.',
+  OPERATION_NOT_ALLOWED: 'Ative o login por e-mail e senha no console do Firebase.',
+  TOO_MANY_ATTEMPTS_TRY_LATER: 'Muitas tentativas seguidas. Tente de novo daqui a pouco.'
+};
+function traduzErro(msg){
+  const chave = String(msg).split(' : ')[0].trim();
+  if(ERROS[chave]) return ERROS[chave];
+  if(/WEAK_PASSWORD/.test(msg)) return 'A senha precisa de pelo menos 6 caracteres.';
+  if(/API key not valid|API_KEY_INVALID/i.test(msg)) return 'Chave do Firebase inválida — rode ./configurar-firebase.sh.';
+  if(/PERMISSION_DENIED|Missing or insufficient/i.test(msg)) return 'O banco recusou o acesso — confira as regras em firestore.rules.';
+  return msg;
+}
+async function authFetch(metodo, corpo){
+  const r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:'+metodo+'?key='+NUVEM.apiKey,
+    { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(corpo) });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(traduzErro((d.error && d.error.message) || 'falha na autenticação'));
+  return d;
+}
+function guardarSessao(d){
+  NUVEM.sess = {
+    uid: d.localId, email: d.email, idToken: d.idToken, refreshToken: d.refreshToken,
+    expiraEm: Date.now() + (+d.expiresIn || 3600) * 1000
+  };
+  localStorage.setItem('fb-email', d.email || '');
 }
 async function renovarSessao(){
-  const r = await fetch(SB.url+'/auth/v1/token?grant_type=refresh_token', {
-    method:'POST', headers:{apikey:SB.key,'Content-Type':'application/json'},
-    body: JSON.stringify({refresh_token: SB.sess.refresh_token})
+  const s = NUVEM.sess;
+  const r = await fetch('https://securetoken.googleapis.com/v1/token?key='+NUVEM.apiKey, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ grant_type:'refresh_token', refresh_token: s.refreshToken })
   });
-  if(!r.ok){ SB.sess=null; setStatus('erro'); throw new Error('sessão expirada — entre novamente'); }
-  SB.sess = await r.json();
+  if(!r.ok){ NUVEM.sess = null; setStatus('erro'); throw new Error('sessão expirada — entre novamente'); }
+  const d = await r.json();
+  NUVEM.sess = { ...s, idToken: d.id_token, refreshToken: d.refresh_token,
+                 expiraEm: Date.now() + (+d.expires_in || 3600) * 1000 };
 }
-async function sbEntrar(email, senha, criar){
-  const caminho = criar ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password';
-  const d = await sbFetch(caminho, {method:'POST', semAuth:true, body:JSON.stringify({email, password:senha})});
-  if(!d || !d.access_token) throw new Error('confirme o e-mail recebido e depois entre normalmente');
-  const anterior = localStorage.getItem('sb-email');
-  if(anterior && anterior !== email) zerarLocal();   // conta diferente: não mistura dados
-  SB.sess = d;
-  localStorage.setItem('sb-email', email);
-  SB.last = '1970-01-01T00:00:00+00:00';
-  TABELAS.forEach(t=>S[t.chave].forEach(r=>{ r._d = true; }));
+async function entrarNuvem(email, senha, criar){
+  const d = await authFetch(criar ? 'signUp' : 'signInWithPassword', { email, password: senha, returnSecureToken: true });
+  const anterior = localStorage.getItem('fb-email');
+  if(anterior && anterior !== d.email) zerarLocal();   // conta diferente: não mistura dados
+  guardarSessao(d);
+  NUVEM.last = '1970-01-01T00:00:00.000Z';
+  COLECOES.forEach(c => S[c.chave].forEach(r => { r._d = true; }));
   S.prefsDirty = true; save0();
   await sincronizar(true);
 }
@@ -1472,101 +1484,135 @@ function zerarLocal(){
   S = JSON.parse(JSON.stringify(DEFAULTS));
   S.theme = tema; save0();
 }
-function sbSair(){
-  SB.sess = null;
-  SB.last = '1970-01-01T00:00:00+00:00';
-  localStorage.removeItem('sb-syncedAt');
+function sairNuvem(){
+  NUVEM.sess = null;
+  NUVEM.last = '1970-01-01T00:00:00.000Z';
+  localStorage.removeItem('fb-syncedAt');
   zerarLocal();
   setStatus('off');
   render();
 }
 
-function paraRemoto(r){
-  const o = {...r};
-  delete o._d;
-  o.user_id = SB.sess.user.id;
-  if(o.prazo === '') o.prazo = null;
-  if(o.conta === '') o.conta = null;
-  return o;
+/* ------------------- conversão entre objeto e documento ------------------- */
+function paraFS(v){
+  if(v === null || v === undefined) return { nullValue: null };
+  if(typeof v === 'boolean') return { booleanValue: v };
+  if(typeof v === 'number')  return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if(Array.isArray(v))       return { arrayValue: { values: v.map(paraFS) } };
+  if(typeof v === 'object')  return { mapValue: { fields: campos(v) } };
+  return { stringValue: String(v) };
 }
-function paraLocal(r){
-  delete r.user_id;
-  if(r.prazo === null) r.prazo = '';
-  if(r.conta === null) r.conta = '';
-  ['valor','alvo','atual','limite'].forEach(k=>{ if(r[k]!==undefined && r[k]!==null) r[k]=+r[k]; });
-  return r;
+function deFS(v){
+  if(!v) return null;
+  if('nullValue'    in v) return null;
+  if('booleanValue' in v) return v.booleanValue;
+  if('integerValue' in v) return +v.integerValue;
+  if('doubleValue'  in v) return +v.doubleValue;
+  if('arrayValue'   in v) return (v.arrayValue.values || []).map(deFS);
+  if('mapValue'     in v) return doObj(v.mapValue.fields);
+  return v.stringValue;
 }
-const mesmaChave = (t,a,b) => t.pk.every(k => a[k] === b[k]);
+/* campos internos (_d) nunca sobem para o banco */
+function campos(obj){
+  const saida = {};
+  Object.entries(obj).forEach(([k,v])=>{ if(k[0] !== '_') saida[k] = paraFS(v); });
+  return saida;
+}
+function doObj(fields){
+  const saida = {};
+  Object.entries(fields || {}).forEach(([k,v])=>{ saida[k] = deFS(v); });
+  return saida;
+}
 
-async function empurrar(t){
-  const sujos = S[t.chave].filter(r=>r._d);
+/* ------------------------------ Firestore ------------------------------ */
+const BASE_REC = () => `projects/${NUVEM.projeto}/databases/(default)/documents`;
+const BASE_URL = () => `https://firestore.googleapis.com/v1/${BASE_REC()}`;
+const MEU_REC  = () => `${BASE_REC()}/users/${NUVEM.uid()}`;
+const MEU_URL  = () => `${BASE_URL()}/users/${NUVEM.uid()}`;
+
+async function fsFetch(url, opts={}){
+  const s = NUVEM.sess;
+  if(s && s.expiraEm && Date.now() > s.expiraEm - 60000) await renovarSessao();
+  const r = await fetch(url, {...opts, headers: Object.assign(
+    {'Content-Type':'application/json', Authorization: 'Bearer ' + NUVEM.sess.idToken}, opts.headers || {})});
+  if(r.status === 401 && !opts._retry){ await renovarSessao(); return fsFetch(url, {...opts, _retry:true}); }
+  if(r.status === 404 && opts.aceita404) return null;
+  if(!r.ok){
+    let msg = await r.text();
+    try{ const j = JSON.parse(msg); msg = (j.error && j.error.message) || msg; }catch(e){}
+    throw new Error(traduzErro(String(msg).slice(0,180)));
+  }
+  const txt = await r.text();
+  return txt ? JSON.parse(txt) : null;
+}
+
+const docId = (c, r) => encodeURIComponent(c.pk.map(k => r[k]).join('_'));
+
+async function empurrar(c){
+  const sujos = S[c.chave].filter(r => r._d);
   if(!sujos.length) return 0;
-  await sbFetch('/rest/v1/'+t.nome, {
-    method:'POST',
-    headers:{ Prefer:'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify(sujos.map(paraRemoto))
-  });
-  sujos.forEach(r=>{ delete r._d; });
+  for(let i = 0; i < sujos.length; i += 400){          // o commit aceita até 500 escritas
+    const writes = sujos.slice(i, i + 400).map(r => ({
+      update: { name: `${MEU_REC()}/${c.nome}/${docId(c,r)}`, fields: campos(r) }
+    }));
+    await fsFetch(`${BASE_URL()}:commit`, { method:'POST', body: JSON.stringify({ writes }) });
+  }
+  sujos.forEach(r => { delete r._d; });
   return sujos.length;
 }
-async function puxar(t){
-  const linhas = await sbFetch('/rest/v1/'+t.nome+'?select=*&atualizado_em=gt.'+encodeURIComponent(SB.last));
-  let maior = SB.last, n = 0;
-  (linhas||[]).forEach(bruta=>{
-    const r = paraLocal(bruta);
+
+async function puxar(c){
+  const corpo = { structuredQuery: {
+    from: [{ collectionId: c.nome }],
+    where: { fieldFilter: { field:{fieldPath:'atualizado_em'}, op:'GREATER_THAN', value:{ stringValue: NUVEM.last } } },
+    orderBy: [{ field:{fieldPath:'atualizado_em'}, direction:'ASCENDING' }]
+  }};
+  const resp = await fsFetch(`${MEU_URL()}:runQuery`, { method:'POST', body: JSON.stringify(corpo) }) || [];
+  let maior = NUVEM.last, n = 0;
+  resp.forEach(linha => {
+    if(!linha.document) return;                        // resposta vazia vem só com readTime
+    const r = doObj(linha.document.fields);
     if(r.atualizado_em > maior) maior = r.atualizado_em;
-    const arr = S[t.chave], i = arr.findIndex(x=>mesmaChave(t,x,r));
+    const arr = S[c.chave], i = arr.findIndex(x => c.pk.every(k => x[k] === r[k]));
     if(i < 0){ arr.push(r); n++; }
     else if(!arr[i]._d && (arr[i].atualizado_em||'') < r.atualizado_em){ arr[i] = r; n++; }
   });
-  return {n, maior};
+  return { n, maior };
 }
+
 async function sincronizarPrefs(){
-  let n = 0;
+  const url = `${MEU_URL()}/preferencias/dados`;
   if(S.prefsDirty){
-    await sbFetch('/rest/v1/preferencias', {
-      method:'POST', headers:{ Prefer:'resolution=merge-duplicates,return=minimal' },
-      body: JSON.stringify([{ user_id:SB.sess.user.id, dados:{cats:S.cats, contas:S.contas}, atualizado_em:S.prefsAt||agora() }])
-    });
+    await fsFetch(url, { method:'PATCH', body: JSON.stringify({
+      fields: campos({ cats: S.cats, contas: S.contas, atualizado_em: S.prefsAt || agora() }) }) });
     S.prefsDirty = false;
-  } else {
-    const linhas = await sbFetch('/rest/v1/preferencias?select=*');
-    const p = (linhas||[])[0];
-    if(p && (S.prefsAt||'') < p.atualizado_em && p.dados){
-      if(p.dados.cats) S.cats = p.dados.cats;
-      if(p.dados.contas) S.contas = p.dados.contas;
-      S.prefsAt = p.atualizado_em; n++;
-    }
+    return 0;
   }
-  return n;
+  const doc = await fsFetch(url, { aceita404: true });
+  if(!doc) return 0;
+  const p = doObj(doc.fields);
+  if((S.prefsAt||'') < (p.atualizado_em||'')){
+    if(p.cats)   S.cats   = p.cats;
+    if(p.contas) S.contas = p.contas;
+    S.prefsAt = p.atualizado_em;
+    return 1;
+  }
+  return 0;
 }
+
 async function sincronizar(manual){
-  if(!SB.ligado()){ setStatus('off'); return; }
+  if(!NUVEM.ligado()){ setStatus('off'); return; }
   if(!navigator.onLine){ setStatus(pendentes()?'pend':'off'); if(manual) toast('Sem conexão — enviarei quando voltar'); return; }
   if(statusSync === 'sync') return;
   setStatus('sync');
   try{
-    let mudou = 0, maior = SB.last;
-    /* uma tabela opcional que ainda não existe no banco não pode derrubar a sincronização */
-    const tolerar = async (t, fn) => {
-      try{ return await fn(); }
-      catch(e){
-        if(t.opcional && /(does not exist|find the table|schema cache|PGRST205|PGRST20[0-9])/i.test(e.message)){
-          if(!avisouTabela){ avisouTabela = true; console.warn('tabela ausente no banco:', t.nome, '— rode supabase.sql de novo'); }
-          return null;
-        }
-        throw e;
-      }
-    };
-    for(const t of TABELAS) mudou += await tolerar(t, ()=>empurrar(t)) || 0;
-    for(const t of TABELAS){
-      const r = await tolerar(t, ()=>puxar(t));
-      if(r){ mudou += r.n; if(r.maior > maior) maior = r.maior; }
-    }
+    let mudou = 0, maior = NUVEM.last;
+    for(const c of COLECOES) mudou += await empurrar(c);
+    for(const c of COLECOES){ const r = await puxar(c); mudou += r.n; if(r.maior > maior) maior = r.maior; }
     mudou += await sincronizarPrefs();
-    SB.last = maior;
+    NUVEM.last = maior;
     limparLixeira();
-    save0(); localStorage.setItem('sb-syncedAt', agora()); setStatus('ok');
+    save0(); localStorage.setItem('fb-syncedAt', agora()); setStatus('ok');
     if(mudou || manual) render();
     if(manual) toast('Sincronizado');
   }catch(e){
@@ -1577,7 +1623,7 @@ async function sincronizar(manual){
 /* descarta localmente as lápides já sincronizadas há mais de 60 dias */
 function limparLixeira(){
   const limite = new Date(Date.now() - 60*864e5).toISOString();
-  TABELAS.forEach(t=>{ S[t.chave] = S[t.chave].filter(r=> !(r.deletado && !r._d && (r.atualizado_em||'') < limite)); });
+  COLECOES.forEach(c=>{ S[c.chave] = S[c.chave].filter(r=> !(r.deletado && !r._d && (r.atualizado_em||'') < limite)); });
 }
 
 /* ============================ tema e inicialização ============================ */
@@ -1602,15 +1648,15 @@ document.addEventListener('keydown', e=>{
   }
 });
 
-$('#pillSync').onclick = () => { if(SB.ligado()) sincronizar(true); else { view='config'; render(); } };
+$('#pillSync').onclick = () => { if(NUVEM.ligado()) sincronizar(true); else { view='config'; render(); } };
 window.addEventListener('online',  ()=>sincronizar());
 window.addEventListener('offline', ()=>setStatus(pendentes()?'pend':'off'));
 document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) sincronizar(); });
 
 aplicarTema();
 render();
-setStatus(SB.ligado() ? (pendentes()?'pend':'ok') : 'off');
-if(SB.ligado()) sincronizar();
+setStatus(NUVEM.ligado() ? (pendentes()?'pend':'ok') : 'off');
+if(NUVEM.ligado()) sincronizar();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('sw.js').catch(()=>{});
 }
