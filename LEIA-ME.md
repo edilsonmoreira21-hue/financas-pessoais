@@ -98,6 +98,12 @@ navegador ou depois de sair da conta.
 
 O ícone vai para a tela inicial e o app abre em tela cheia, sem barra de navegador.
 
+No celular a interface muda de forma: barra de navegação fixa embaixo (Painel, Extrato,
+Cartões, Dívidas e *Mais*), botão flutuante para lançar, cabeçalho de uma linha só com o
+seletor de mês, indicadores lado a lado, extrato em cartões no lugar da tabela e formulários
+que sobem como folha inferior. O app também respeita as áreas seguras do iPhone (notch e barra
+inferior).
+
 ## Cartões de crédito e parcelamento
 
 Na aba **Cartões** você cadastra cada cartão com limite, dia de fechamento e dia de vencimento.

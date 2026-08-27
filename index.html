@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Finanças Pessoais</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4f46e5">
@@ -200,12 +200,102 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 
-/* ---------- ajustes finos de telas estreitas (precisam vir depois das regras base) ---------- */
+/* ---------- navegação de celular ---------- */
+.barra-inferior{
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:30;
+  background:var(--surface);border-top:1px solid var(--border);
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  justify-content:space-around;
+}
+.barra-inferior button{
+  border:0;background:transparent;color:var(--muted);cursor:pointer;
+  display:grid;justify-items:center;gap:3px;padding:7px 10px;border-radius:12px;
+  font-size:11px;font-weight:600;min-width:58px;transition:.15s
+}
+.barra-inferior button i{font-style:normal;font-size:18px;line-height:1}
+.barra-inferior button.active{color:var(--brand);background:var(--brand-soft)}
+.fab{
+  display:none;position:fixed;right:16px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:31;
+  width:56px;height:56px;border-radius:50%;border:0;cursor:pointer;
+  background:var(--brand);color:#fff;font-size:30px;line-height:1;
+  box-shadow:0 10px 24px rgba(79,70,229,.42);place-items:center
+}
+.fab:active{transform:scale(.94)}
+.menu-mais{display:grid;padding:8px}
+.menu-mais button{
+  display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;
+  color:var(--text);font-size:15.5px;font-weight:550;padding:15px 14px;border-radius:12px;cursor:pointer;text-align:left
+}
+.menu-mais button i{font-style:normal;font-size:18px}
+.menu-mais button:active{background:var(--surface-2)}
+.lista-mobile{display:none}
+.cartao-topo{display:flex;align-items:start;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.cartao-topo .cartao-nome{flex:1;min-width:140px}
+.cartao-topo .cartao-acoes{order:3;white-space:nowrap}
+.cartao-topo .cartao-fatura{order:2;text-align:right}
+.cartao-topo .cartao-fatura .valor{font-size:22px;font-weight:700}
+
+/* ---------- ajustes de telas estreitas (depois das regras base) ---------- */
 @media(max-width:560px){
-  .item .txt .t{white-space:normal}   /* descrição inteira em vez de reticências */
-  .item .btn.sm{padding:4px 7px}
-  .item .ico{width:32px;height:32px;font-size:14px}
-  .item{gap:9px}
+  body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+  .app{padding:0 13px 0}
+  header.top{padding:calc(12px + env(safe-area-inset-top)) 0 12px;margin-bottom:16px}
+  .logo{width:auto}                         /* deixa de ocupar a linha inteira */
+  .logo .nome{display:none}                 /* só a marca; o mês fica na mesma linha */
+  .mes-nav{flex:1 1 auto;min-width:0;gap:4px}
+  header.top .mes-nav .btn{display:none}   /* navegação de mês pelo próprio seletor */
+  header.top #btnTheme{display:none}        /* tema vai para o menu Mais */
+  header.top .btn{padding-left:10px;padding-right:10px}
+  #pillSync{padding:0 10px}
+  header.top #btnNew{display:none}          /* substituído pelo botão flutuante */
+  nav.tabs{display:none}                    /* substituída pela barra inferior */
+  .barra-inferior{display:flex}
+  .fab{display:grid}
+
+  .kpis{grid-template-columns:1fr 1fr;gap:11px}
+  .kpi .value{font-size:19px}
+  .kpi .label{font-size:12px}
+  .kpi .foot{font-size:11.5px}
+  .card{padding:15px;border-radius:13px}
+  .grid{gap:13px}
+
+  /* cartão: nome e ações em cima, fatura embaixo ocupando a linha */
+  .cartao-topo{gap:10px}
+  .cartao-topo .cartao-acoes{order:2}
+  .cartao-topo .cartao-fatura{order:3;flex:1 1 100%;text-align:left;
+    background:var(--surface-2);border-radius:12px;padding:11px 13px}
+  .cartao-topo .cartao-fatura .valor{font-size:25px;margin:2px 0}
+
+  .item .txt .t{white-space:normal}         /* descrição inteira em vez de reticências */
+  .item .btn.sm{padding:5px 8px}
+  .item .ico{width:33px;height:33px;font-size:15px}
+  .item{gap:10px;padding:12px 0}
+
+  .table-wrap{display:none}                 /* tabela vira lista de cartões */
+  .lista-mobile{display:block}
+  /* filtros em grade: busca em cima, os três seletores lado a lado */
+  .toolbar{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;align-items:end}
+  .toolbar .grow{grid-column:1/-1}
+  .toolbar label.field{min-width:0}
+  .toolbar label.field select{width:100% !important}
+  .toolbar > div:last-child{grid-column:1/-1;margin-left:0;display:flex;gap:8px}
+  .toolbar > div:last-child .btn{flex:1}
+
+  /* diálogos viram folha inferior */
+  dialog{
+    width:100%;max-width:none;margin:0;position:fixed;left:0;right:0;bottom:0;top:auto;
+    border-radius:20px 20px 0 0;max-height:92vh;border-bottom:0
+  }
+  .dlg-head{position:relative;padding-top:24px;justify-content:center}
+  .dlg-head::before{
+    content:'';position:absolute;top:10px;left:50%;transform:translateX(-50%);
+    width:40px;height:4px;border-radius:3px;background:var(--border)
+  }
+  .dlg-body{padding-bottom:6px}
+  .dlg-foot{padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  .dlg-foot .btn{flex:1;padding:12px}
+  .row-2{grid-template-columns:1fr 1fr;gap:10px}
+  input,select{padding:11px}
 }
 .chip{display:flex;align-items:center;gap:7px;background:var(--surface-2);border-radius:20px;padding:5px 6px 5px 12px;font-size:13px}
 .chip button{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;border-radius:50%}
@@ -216,7 +306,7 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
 <div class="app">
   <header class="top">
     <div class="top-row">
-      <div class="logo"><span class="mark">◎</span> Finanças Pessoais</div>
+      <div class="logo"><span class="mark">◎</span><span class="nome">Finanças Pessoais</span></div>
       <div class="spacer"></div>
       <div class="mes-nav">
         <button class="btn sm" id="mesPrev" title="Mês anterior" aria-label="Mês anterior">‹</button>
@@ -272,6 +362,26 @@ dialog::backdrop{background:rgba(10,12,25,.55);backdrop-filter:blur(2px)}
       <button class="btn primary" value="ok" type="submit">Salvar</button>
     </div>
   </form>
+</dialog>
+
+<nav class="barra-inferior" id="barraInferior">
+  <button data-view="dashboard"><i>📊</i><span>Painel</span></button>
+  <button data-view="lancamentos"><i>🧾</i><span>Extrato</span></button>
+  <button data-view="cartoes"><i>💳</i><span>Cartões</span></button>
+  <button data-view="dividas"><i>🏦</i><span>Dívidas</span></button>
+  <button id="btnMais"><i>⋯</i><span>Mais</span></button>
+</nav>
+<button class="fab" id="fabNovo" aria-label="Novo lançamento">+</button>
+
+<dialog id="dlgMais">
+  <div class="dlg-head"><h2 style="font-size:17px">Mais</h2></div>
+  <div class="menu-mais">
+    <button data-view="orcamentos"><i>🎯</i> Orçamentos</button>
+    <button data-view="metas"><i>🏆</i> Metas</button>
+    <button data-view="config"><i>⚙️</i> Configurações</button>
+    <button id="temaMais"><i>🌓</i> Alternar tema claro / escuro</button>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="fecharMais">Fechar</button></div>
 </dialog>
 
 <dialog id="dlgCartao">
@@ -618,6 +728,9 @@ function render(){
     return;
   }
   $$('#tabs button').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  const noMais = ['orcamentos','metas','config'].includes(view);
+  $$('#barraInferior button').forEach(b=>b.classList.toggle('active',
+    b.id === 'btnMais' ? noMais : b.dataset.view === view));
   popularMeses();
   const el=$('#view');
   el.innerHTML = ({dashboard:vDashboard, lancamentos:vLancamentos, orcamentos:vOrcamentos, cartoes:vCartoes, dividas:vDividas, metas:vMetas, config:vConfig})[view]();
@@ -899,6 +1012,23 @@ function vLancamentos(){
           </td>
         </tr>`).join('')}</tbody>
     </table></div>`
+    : ''}
+
+    ${lista.length ? `<div class="lista-mobile"><div class="list">${lista.map(t=>`
+      <div class="item">
+        <div class="ico" style="background:${t.tipo==='receita'?'var(--green-soft)':'var(--red-soft)'}">${ICON[t.categoria]||(t.tipo==='receita'?'💰':'💸')}</div>
+        <div class="txt">
+          <div class="t">${esc(t.descricao)}${t.fixo?' <span class="tag">fixo</span>':''}${t.parcelas>1?` <span class="tag">${t.parcela}/${t.parcelas}</span>`:''}</div>
+          <div class="s">${esc(t.categoria)} · ${dataBR(t.data)}${t.conta?' · '+esc(t.conta):''}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="amt ${t.tipo==='receita'?'pos':'neg'}">${t.tipo==='receita'?'+':'−'} ${fmt(t.valor)}</div>
+          <div style="margin-top:4px;white-space:nowrap">
+            <button class="btn ghost sm" data-edit="${t.id}">✏️</button>
+            <button class="btn ghost sm danger" data-del="${t.id}">🗑</button>
+          </div>
+        </div>
+      </div>`).join('')}</div></div>`
     : `<div class="empty"><div class="big">🔍</div>Nenhum lançamento encontrado com esses filtros.</div>`}
   </div>`;
 }
@@ -946,20 +1076,20 @@ function vCartoes(){
     const venc = vencimentoDaFatura(c, mes);
     return `
     <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:start;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+      <div class="cartao-topo">
         <div class="ico" style="width:42px;height:42px;background:var(--brand-soft);font-size:19px">💳</div>
-        <div style="flex:1;min-width:140px">
+        <div class="cartao-nome">
           <b style="font-size:16px">${esc(c.nome)}</b>
           <div class="hint">fecha dia ${c.fechamento} · vence dia ${c.vencimento}${limite?` · limite ${fmt(limite)}`:''}</div>
         </div>
-        <div style="text-align:right">
-          <div class="hint">Fatura de ${mesLongo(mes)}</div>
-          <div style="font-size:22px;font-weight:700">${fmt(fatura)}</div>
-          <div class="hint">vence em ${dataBR(venc)}</div>
-        </div>
-        <div style="white-space:nowrap">
+        <div class="cartao-acoes">
           <button class="btn ghost sm" data-editcartao="${c.id}">✏️</button>
           <button class="btn ghost sm danger" data-delcartao="${c.id}">🗑</button>
+        </div>
+        <div class="cartao-fatura">
+          <div class="hint">Fatura de ${mesLongo(mes)}</div>
+          <div class="valor">${fmt(fatura)}</div>
+          <div class="hint">vence em ${dataBR(venc)}</div>
         </div>
       </div>
 
@@ -1897,6 +2027,13 @@ $('#mesRef').onchange=e=>{ mes=e.target.value||mes; render(); };
 $('#mesPrev').onclick=()=>{ mes=addMes(mes,-1); render(); };
 $('#mesNext').onclick=()=>{ mes=addMes(mes,1); render(); };
 $$('#tabs button').forEach(b=>b.onclick=()=>{ view=b.dataset.view; render(); });
+const irPara = v => { view = v; window.scrollTo(0,0); render(); };
+$$('#barraInferior button[data-view]').forEach(b=>b.onclick=()=>irPara(b.dataset.view));
+$$('#dlgMais button[data-view]').forEach(b=>b.onclick=()=>{ $('#dlgMais').close(); irPara(b.dataset.view); });
+$('#btnMais').onclick   = ()=> $('#dlgMais').showModal();
+$('#fecharMais').onclick= ()=> $('#dlgMais').close();
+$('#temaMais').onclick  = ()=> { alternarTema(); $('#dlgMais').close(); };
+$('#fabNovo').onclick   = ()=> abrirTx();
 window.addEventListener('resize', ()=>{ if(view==='dashboard') render(); });
 document.addEventListener('keydown', e=>{
   if(e.key==='n' && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && !$('#dlgTx').open){
