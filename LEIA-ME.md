@@ -98,6 +98,29 @@ navegador ou depois de sair da conta.
 
 O ícone vai para a tela inicial e o app abre em tela cheia, sem barra de navegador.
 
+## Cartões de crédito e parcelamento
+
+Na aba **Cartões** você cadastra cada cartão com limite, dia de fechamento e dia de vencimento.
+A partir daí:
+
+- No formulário de lançamento, o campo *Conta / método* passa a listar os cartões num grupo
+  separado. Escolhendo um cartão, a despesa entra na fatura dele.
+- A fatura de cada mês é montada pela regra do fechamento: compra feita **depois** do dia de
+  fechamento entra na fatura do mês seguinte. O vencimento também acompanha — fecha 28/08 e
+  vence dia 5 significa vencer em 05/09.
+- A aba mostra a fatura do mês selecionado no topo da tela, com o total, quanto do limite foi
+  usado e o que já está comprometido nas faturas seguintes.
+- Dá para **editar a fatura direto ali**: o botão *Lançar nesta fatura* já abre o formulário
+  apontando para o cartão, e cada linha tem editar e excluir.
+
+**Parcelamento:** no lançamento de despesa existe o campo *Parcelas*. Informe o valor total da
+compra e o número de parcelas — o app cria um lançamento por mês, com o selo `3/12`, e mostra
+antes de salvar quanto fica cada parcela e em que mês termina. A divisão é feita em centavos e
+a sobra vai na primeira parcela, como o cartão faz.
+
+Excluir uma parcela pergunta se você quer excluir também as seguintes, então dá para cancelar
+uma compra parcelada inteira ou remover só um mês.
+
 ## Aba de dívidas
 
 Empréstimos, financiamentos e compras parceladas ficam na aba **Dívidas**. De cada uma o app
